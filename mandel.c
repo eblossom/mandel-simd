@@ -15,8 +15,6 @@ mandel_basic(unsigned char *image, const struct spec *s)
 {
     float xscale = (s->xlim[1] - s->xlim[0]) / s->width;
     float yscale = (s->ylim[1] - s->ylim[0]) / s->height;
-    float iter_scale = 1.0f / s->iterations;
-    float depth_scale = s->depth - 1;
     #pragma omp parallel for schedule(dynamic, 1)
     for (int y = 0; y < s->height; y++) {
         for (int x = 0; x < s->width; x++) {
@@ -35,13 +33,16 @@ mandel_basic(unsigned char *image, const struct spec *s)
                 if (zr * zr + zi * zi >= 4.0f)
                     break;
             }
-            mk *= iter_scale;
-            mk = sqrtf(mk);
-            mk *= depth_scale;
             int pixel = mk;
-            image[y * s->width * 3 + x * 3 + 0] = pixel;
-            image[y * s->width * 3 + x * 3 + 1] = pixel;
-            image[y * s->width * 3 + x * 3 + 2] = pixel;
+	    // netpgm - portable grayscale image format.
+	    // 2 byte version is big endian.
+	    if (s->depth > 256) {
+	        image[y * s->width * 2 + x * 2 + 0] = pixel >> 8;
+		image[y * s->width * 2 + x * 2 + 1] = pixel;
+            }
+	    else {
+	        image[y * s->width + x] = pixel;
+	    }
         }
     }
 }
@@ -97,9 +98,11 @@ main(int argc, char *argv[])
             case 'h':
                 spec.height = atoi(optarg);
                 break;
+#if 0
             case 'd':
                 spec.depth = atoi(optarg);
                 break;
+#endif
             case 'k':
                 spec.iterations = atoi(optarg);
                 break;
@@ -137,13 +140,24 @@ main(int argc, char *argv[])
         }
     }
 
+    spec.depth = spec.iterations;
+    if (spec.iterations < 0 || spec.iterations >= 65536){
+        fprintf(stderr, "iterations must be > 0 and < 65536\n");
+        exit(1);
+    }
+
     /* Render */
-    unsigned char *image = malloc(spec.width * spec.height * 3);
+
+    size_t nbytes = spec.width * spec.height;
+    if (spec.depth > 256)
+        nbytes *= 2;
+
+    unsigned char *image = malloc(nbytes);
 
     #ifdef __x86_64__
-    if (use_avx && is_avx_supported())
+    if (0 && use_avx && is_avx_supported())
         mandel_avx(image, &spec);
-    else if (use_sse2)
+    else if (0 && use_sse2)
         mandel_sse2(image, &spec);
     #endif // __x86_64__
 
@@ -161,8 +175,8 @@ main(int argc, char *argv[])
         mandel_basic(image, &spec);
 
     /* Write result */
-    fprintf(stdout, "P6\n%d %d\n%d\n", spec.width, spec.height, spec.depth - 1);
-    fwrite(image, spec.width * spec.height, 3, stdout);
+    fprintf(stdout, "P5\n%d %d\n%d\n", spec.width, spec.height, spec.depth - 1);
+    fwrite(image, spec.width * spec.height, spec.depth > 256 ? 2 : 1, stdout);
     free(image);
 
     return 0;
