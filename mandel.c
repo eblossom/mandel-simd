@@ -13,15 +13,15 @@ void mandel_neon(unsigned char *image, const struct spec *s);
 void
 mandel_basic(unsigned char *image, const struct spec *s)
 {
-    float xdiff = s->xlim[1] - s->xlim[0];
-    float ydiff = s->ylim[1] - s->ylim[0];
+    float xscale = (s->xlim[1] - s->xlim[0]) / s->width;
+    float yscale = (s->ylim[1] - s->ylim[0]) / s->height;
     float iter_scale = 1.0f / s->iterations;
     float depth_scale = s->depth - 1;
     #pragma omp parallel for schedule(dynamic, 1)
     for (int y = 0; y < s->height; y++) {
         for (int x = 0; x < s->width; x++) {
-            float cr = x * xdiff / s->width  + s->xlim[0];
-            float ci = y * ydiff / s->height + s->ylim[0];
+            float cr = x * xscale  + s->xlim[0];
+            float ci = y * yscale + s->ylim[0];
             float zr = cr;
             float zi = ci;
             int k = 0;
